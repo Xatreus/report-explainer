@@ -10,6 +10,9 @@ MAX_CHARS = 30_000
 def normalize_text(text: str) -> str:
     """Normalize whitespace while preserving paragraph boundaries."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Trim spaces adjacent to line breaks before collapsing repeated blank lines.
+    text = re.sub(r"[ \t\f\v]+\n", "\n", text)
+    text = re.sub(r"\n[ \t\f\v]+", "\n", text)
     text = re.sub(r"[\t\f\v ]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
