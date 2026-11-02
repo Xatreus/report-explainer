@@ -140,6 +140,3 @@ report-explainer/
 
 Keep the project simple and focused. For changes to text processing, add or update unit tests and run `pytest -q` before opening a pull request.
 
-## License
-
-No license is currently declared. Unless a license is added, standard copyright restrictions apply.
