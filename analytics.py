@@ -45,9 +45,7 @@ def compare_report_analyses(left: dict[str, Any], right: dict[str, Any]) -> dict
     shared = []
     for key in sorted(old_metrics.keys() & new_metrics.keys()):
         old, new = old_metrics[key], new_metrics[key]
-        shared.append({"name": new["name"], "earlier_value": old["value"], "later_value": new["value"],
-                       "earlier_unit": old.get("unit", ""), "later_unit": new.get("unit", ""),
-                       "comparable_units": old.get("unit", "").casefold() == new.get("unit", "").casefold()})
+        shared.append(compare_metric_values(old, new))
     old_risks = {x["title"].casefold() for x in left.get("risks", [])}
     new_risks = {x["title"].casefold() for x in right.get("risks", [])}
     return {"shared_metrics": shared, "new_risks": sorted(new_risks-old_risks),
