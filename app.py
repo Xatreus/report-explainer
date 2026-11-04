@@ -44,7 +44,7 @@ def get_client():
 
 store = get_store()
 client = get_client()
-model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+model = os.getenv("OPENAI_MODEL", "").strip()
 with st.sidebar:
     st.header("Workspace")
     st.caption("Documents are stored in a local SQLite database.")
@@ -53,6 +53,17 @@ with st.sidebar:
     audience = st.selectbox("Audience", ["General reader", "Student", "Business leader", "Technical reader", "Researcher"])
     detail = st.select_slider("Explanation depth", ["Quick overview", "Balanced", "Detailed"], value="Balanced")
     language = st.selectbox("Output language", ["English", "Hindi", "Arabic", "Urdu"])
+    model = st.text_input(
+        "Chat model",
+        value=model,
+        placeholder="Enter a model supported by your provider",
+        help="Choose any chat-completions model available to your configured provider. The app does not assume a default model.",
+    ).strip()
+    ai_ready = client is not None and bool(model)
+    if not client:
+        st.caption("Add OPENAI_API_KEY in .env to enable AI features.")
+    elif not model:
+        st.caption("Enter your provider's model name above to enable AI features.")
     rerank = st.toggle("Use cross-encoder reranking", value=False, help="Downloads an additional model on first use.")
     use_ai = st.toggle("Use AI explanation when configured", value=True)
     st.caption("Embeddings run locally. The first use downloads the selected model.")
@@ -123,7 +134,7 @@ with tabs[1]:
         except Exception as exc:
             st.error(f"Search failed: {exc}")
     hits = st.session_state.get("last_hits", [])
-    if hits and client:
+    if hits and ai_ready:
         if st.button("Generate cited answer from retrieved passages"):
             context = "\n\n".join(
                 f"[{h['id']} | {h['file_name']}" + (f" | page {h['page_start']}" if h.get("page_start") else "") + f"] {h['text']}"
@@ -140,15 +151,15 @@ with tabs[1]:
             except Exception as exc:
                 st.error(f"Answer generation failed: {exc}")
     elif hits:
-        st.info("Configure OPENAI_API_KEY to generate an answer. Retrieval works independently.")
+        st.info("Set OPENAI_API_KEY and enter a supported chat model in the sidebar to generate an answer. Retrieval works independently.")
 
 with tabs[2]:
     st.subheader("Compare reports")
     docs = store.list_documents()
     if len(docs) < 2:
         st.info("Index at least two reports to compare them.")
-    elif not client:
-        st.warning("Configure OPENAI_API_KEY to extract comparable structured findings.")
+    elif not ai_ready:
+        st.warning("Set OPENAI_API_KEY and enter a supported chat model in the sidebar to extract comparable structured findings.")
     else:
         labels = {f"{d['file_name']} · {d['id']}": d["id"] for d in docs}
         left_label = st.selectbox("Earlier / baseline report", list(labels), key="compare_left")
@@ -241,8 +252,8 @@ with tabs[4]:
     agent_question = st.text_area("Analysis objective", placeholder="Compare the major operational risks across all reports and cite the strongest evidence.")
     max_steps = st.slider("Maximum tool-call rounds", 1, 6, 4)
     if st.button("Run report analyst", type="primary", disabled=not agent_question.strip()):
-        if not client:
-            st.error("Configure OPENAI_API_KEY to run the analysis agent.")
+        if not ai_ready:
+            st.error("Set OPENAI_API_KEY and enter a supported chat model in the sidebar to run the analysis agent.")
         else:
             try:
                 with st.spinner("Planning, retrieving evidence and verifying the draft…"):
@@ -285,7 +296,7 @@ with tabs[5]:
             explain_tab, ask_tab = st.tabs(["Explain report", "Ask this report"])
             with explain_tab:
                 if st.button("Explain this report", type="primary", key="single_explain"):
-                    if use_ai and client:
+                    if use_ai and ai_ready:
                         prompt = f"""Explain the report below for a {audience.lower()}.
 Depth: {detail}. Output language: {language}.
 Return Markdown with: one-sentence summary, plain-language explanation, key findings,
@@ -316,15 +327,15 @@ REPORT TEXT:
                         st.markdown(outline)
                         st.download_button("Download local outline (.md)", outline,
                                            file_name="report-outline.md", mime="text/markdown")
-                        if use_ai:
-                            st.info("AI is enabled but no API key is configured. This is a local heuristic outline.")
+                        if use_ai and not ai_ready:
+                            st.info("To use AI, set OPENAI_API_KEY and enter a model supported by your provider in the sidebar. This is a local heuristic outline.")
             with ask_tab:
                 question = st.text_input("Your question", key="single_report_question",
                                           placeholder="What are the main risks and what evidence supports them?")
                 if st.button("Find answer", type="primary", key="single_report_ask",
                              disabled=not question.strip()):
-                    if not use_ai or not client:
-                        st.warning("Grounded Q&A requires AI mode and an OPENAI_API_KEY.")
+                    if not use_ai or not ai_ready:
+                        st.warning("Grounded Q&A requires AI mode, OPENAI_API_KEY and a supported chat model selected in the sidebar.")
                     else:
                         chunks = chunk_text(normalized)
                         ranked = retrieve_chunks(question, chunks, top_k=4)
