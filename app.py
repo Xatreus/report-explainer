@@ -9,7 +9,7 @@ from openai import OpenAI
 from analytics import ANALYSIS_SCHEMA, compare_report_analyses, parse_json_object
 from analysis_agent import run_report_agent
 from document_store import DocumentStore
-from report_utils import extract_pdf_text, local_outline, normalize_text, validate_text
+from report_utils import chunk_text, extract_pdf_text, local_outline, normalize_text, validate_text
 
 load_dotenv()
 st.set_page_config(page_title="Report Explainer", page_icon="📄", layout="wide")
@@ -142,7 +142,7 @@ with tabs[2]:
                             response = client.chat.completions.create(model=model, temperature=0,
                                 response_format={"type": "json_object"}, messages=[
                                     {"role": "system", "content": "Extract only evidence explicitly stated. Return valid JSON with summary, entities, metrics, risks, actions, limitations. Each extracted item must contain a source_id using the supplied chunk IDs."},
-                                    {"role": "user", "content": f"Schema: {json.dumps(ANALYSIS_SCHEMA)}\nReport: {doc['text'][:30000]}"},
+                                    {"role": "user", "content": f"Schema: {json.dumps(ANALYSIS_SCHEMA)}\nReport passages: {json.dumps([{'id': chunk['id'], 'text': chunk['text']} for chunk in chunk_text(doc['text'][:30000])], ensure_ascii=False)}"},
                                 ])
                             cached = parse_json_object(response.choices[0].message.content or "{}")
                             store.save_analysis(doc_id, cached)
