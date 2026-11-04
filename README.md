@@ -4,7 +4,7 @@
 
 Report Explainer is a local-first document intelligence workspace. Upload PDF and TXT reports, search across them, compare findings, explore extracted metrics and risks, and ask an AI analyst to explain what the documents actually say.
 
-Built as a runnable portfolio project with a simple Streamlit interface and an optional AI provider. You can try the application without an API key; AI-generated explanations, comparisons and agent runs become available when you configure one.
+Built as a runnable portfolio project with a simple Streamlit interface and an optional AI provider. You can try the application without an API key; AI-generated explanations, comparisons and agent runs become available when you configure a provider and enter a model name supported by that provider in the sidebar.
 
 <p align="center">
   <strong>PDF/TXT ingestion · Hybrid RAG · Page-aware evidence · Multi-report analysis · AI agent</strong>
@@ -41,7 +41,7 @@ The app is organized around six workspaces:
 - Python 3.11 or newer
 - Git
 - Internet access for the first installation and first download of local embedding models
-- An LLM API key is optional; any OpenAI-compatible chat-completions provider can be configured
+- An LLM API key and model name are user-selected; any OpenAI-compatible chat-completions provider can be configured
 
 ### 2. Clone and create an environment
 
@@ -81,10 +81,11 @@ Copy `.env.example` to `.env` and set:
 ```dotenv
 OPENAI_API_KEY=your_api_key
 OPENAI_BASE_URL=
-OPENAI_MODEL=gpt-4o-mini
+# Optional: prefill the model field in the app sidebar
+OPENAI_MODEL=
 ```
 
-Leave `OPENAI_API_KEY` empty to use the local heuristic outline and local retrieval features. No API key is needed to launch the app or index documents. AI explanations, generated answers, report comparisons and the report analyst require a configured chat-completions provider.
+Set `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` for your provider. Then enter the exact model identifier supported by that provider in the **Chat model** field in the app sidebar. There is no hard-coded default model: different providers expose different model names and capabilities. `OPENAI_MODEL` may be set in `.env` if you want to prefill that field, but it is optional. Leave the key and model empty to use local heuristic outlines and local retrieval features. No API key is needed to launch the app or index documents. AI explanations, generated answers, report comparisons and the report analyst require a configured chat-completions provider and a model.
 
 ### 5. Launch
 
@@ -207,7 +208,7 @@ The functions accept ranked result IDs and relevance judgments. A representative
 |---|---|---|
 | `OPENAI_API_KEY` | Optional LLM provider key | Empty |
 | `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint | Provider default |
-| `OPENAI_MODEL` | Chat model name | `gpt-4o-mini` |
+| `OPENAI_MODEL` | Optional initial value for the sidebar model field | Empty (user chooses) |
 | `EMBEDDING_MODEL` | Local embedding model | `sentence-transformers/all-MiniLM-L6-v2` |
 | `RERANKER_MODEL` | Optional cross-encoder model | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
 | `REPORT_DB_PATH` | Local SQLite database path | `data/report_explainer.db` |
@@ -256,4 +257,4 @@ GitHub Actions runs the core test suite on Python 3.12 for pushes and pull reque
 
 ## License
 
-No license is currently declared. Add a license file if you want to explicitly grant others permission to reuse, modify or distribute this project.
+This project is licensed under the [MIT License](LICENSE). You are free to use, modify, distribute and sublicense it subject to the license terms.
