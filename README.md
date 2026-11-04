@@ -1,142 +1,109 @@
-# Report Explainer
+# Report Explainer — Document Intelligence Platform
 
-**Make long reports easier to understand.** Upload a PDF or text file, or paste report content, and turn dense writing into a plain-language overview with key findings, important figures, risks, and follow-up questions.
+Turn a folder of reports into a searchable, evidence-aware intelligence workspace. Ingest PDF/TXT documents, search with semantic and lexical retrieval, compare extracted findings, inspect metrics and risks, and run a bounded report-analysis agent.
 
-Report Explainer is intentionally small: a polished Python app that demonstrates practical AI integration without unnecessary databases, agents, or infrastructure.
+## Four capability layers
 
-## What it does
+### Phase 1 — Semantic RAG
+- Local sentence-transformer embeddings (default: all-MiniLM-L6-v2).
+- Persistent chunk embeddings in SQLite.
+- Dense vector similarity plus lexical ranking, fused using reciprocal-rank fusion.
+- Optional cross-encoder reranking (default: ms-marco-MiniLM-L-6-v2).
+- Source-aware Q&A with retrieved passages displayed for inspection.
 
-- 📄 **PDF and TXT input** — extract selectable PDF text or read text files; paste text directly when convenient.
-- 🧠 **AI-powered explanations** — generate an audience-aware explanation using an OpenAI-compatible chat-completions API.
-- 🎯 **Choose your audience** — general reader, student, business leader, technical reader, or researcher.
-- 🌐 **Multilingual output** — request English, Hindi, Arabic, or Urdu.
-- 🔎 **Evidence-aware structure** — summary, findings, important numbers, risks, next steps, and information the source does not provide.
-- 📴 **Local fallback** — get a basic, clearly labelled heuristic outline even without an API key.
-- ⬇️ **Export results** — download the explanation or outline as Markdown.
-- 🧪 **Testable core logic** — text normalization, input validation, and fallback generation are separated into a small utility module.
+### Phase 2 — Multi-document intelligence
+- Upload up to 100 PDF/TXT reports per batch.
+- Deduplicate identical normalized content.
+- Search the whole workspace or selected reports.
+- Compare extracted metrics and identify newly listed, shared, and no-longer-listed risk labels.
+- Persist extracted analyses for repeat comparisons.
 
-## Built with
+### Phase 3 — Document intelligence dashboard
+- Extract entities, numeric metrics, risks, action items and limitations.
+- Interactive metric charts and risk distribution charts.
+- Tables grouped by report and entity.
+- Metric comparisons retain units and periods; incompatible units are not treated as directly comparable.
 
-- **Python** — application logic
-- **Streamlit** — interactive web interface
-- **pypdf** — extract selectable text from PDFs
-- **OpenAI Python SDK** — AI provider integration, including compatible endpoints
-- **python-dotenv** — local environment configuration
-- **pytest** — unit tests and regression checks
-- **GitHub Actions** — automated test workflow
+### Phase 4 — Specialized report-analysis agent
+- Bounded tool-calling loop with configurable maximum rounds.
+- Allowlisted read-only tools: list reports, search reports, read report text.
+- Execution trace and separate evidence-auditing pass.
+
+## Architecture
+
+| Layer | Technology |
+|---|---|
+| UI | Streamlit |
+| Extraction | pypdf |
+| Chunking | Overlapping word-window chunks |
+| Embeddings | sentence-transformers |
+| Vector storage | SQLite JSON vectors, cosine similarity |
+| Hybrid retrieval | Dense similarity + lexical ranking + reciprocal-rank fusion |
+| Reranking | Optional Sentence Transformers CrossEncoder |
+| LLM | OpenAI SDK / compatible chat-completions provider |
+| Analytics | JSON-structured extraction |
+| Dashboard | Plotly, pandas |
+| Agent | Bounded function calling and evidence verification |
+| Tests | pytest, GitHub Actions |
+
+SQLite keeps setup manageable. The current vector index scans stored vectors in-process; it is suitable for a small portfolio workspace, not a high-throughput corpus. A dedicated vector database or ANN index can replace this layer later.
 
 ## Quick start
 
-### Requirements
+Python 3.11+ is recommended. Semantic models run locally and may download several hundred MB on first use.
 
-- Python 3.11+
-- An API key from a supported OpenAI-compatible provider for AI-generated explanations (optional for local outline mode)
+1. Clone the repository: https://github.com/Xatreus/report-explainer
+2. Create a virtual environment: python -m venv .venv
+3. Activate it (PowerShell: .venv\\Scripts\\Activate.ps1; macOS/Linux: source .venv/bin/activate).
+4. Install core dependencies: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+5. Install semantic models: python -m pip install -r requirements-ml.txt
+6. Copy .env.example to .env and configure the settings below.
+7. Run: streamlit run app.py
+8. Test: python -m pytest -q
 
-### 1. Clone the repository
+The core requirements keep CI lightweight. The optional ML requirements install PyTorch/Transformers through sentence-transformers and may take longer or require substantial disk space. If PyTorch installation is platform-specific, install the appropriate CPU or CUDA build first, then install requirements-ml.txt.
 
-```bash
-git clone https://github.com/Xatreus/report-explainer.git
-cd report-explainer
-```
+Configuration:
 
-### 2. Create and activate a virtual environment
+    OPENAI_API_KEY=your_key
+    OPENAI_BASE_URL=
+    OPENAI_MODEL=gpt-4o-mini
+    EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+    RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+    REPORT_DB_PATH=data/report_explainer.db
 
-**Windows PowerShell**
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
+## How to use
 
-**macOS / Linux**
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+1. Open Workspace & upload, select PDF/TXT files, and ingest them.
+2. Open Semantic search & Q&A, ask a question, inspect retrieved passages, and generate a cited answer.
+3. Use Compare reports to select baseline and later reports. Structured extraction is cached locally.
+4. Open Intelligence dashboard to inspect entities, metrics and risk distribution.
+5. Open Analysis agent, describe a cross-report objective, then inspect the tool trace and evidence-checked answer.
 
-### 3. Install dependencies
+## Privacy, safety and limitations
 
-```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
+- Reports, extracted analyses and embeddings are stored locally in SQLite at data/report_explainer.db by default. Do not commit this database.
+- Embedding and reranking models run locally after download. Initial model downloads require internet access.
+- LLM calls send report text, selected passages, or tool results to the configured provider. Review provider data terms before processing confidential documents.
+- The agent has an allowlist of read-only tools and a bounded call loop. It cannot execute arbitrary code or take external actions.
+- Prompt injection remains a risk. Documents are untrusted input; prompt instructions are defense-in-depth, not a security boundary.
+- Model-generated metrics and risk labels require human review. Source IDs point to stored chunks; they do not prove a claim.
+- This is a portfolio application, not a hardened multi-tenant service. Authentication, authorization, encryption-at-rest, quotas, background workers, backups and tenant isolation are not implemented.
 
-### 4. Configure the AI provider (optional)
+## Known limitations
 
-Copy `.env.example` to `.env`, then set your credentials and model:
+- OCR for scanned PDFs is not included.
+- SQLite vector search is an exact scan, not an approximate-nearest-neighbor index.
+- Lexical search is simple; multilingual retrieval depends on model and tokenization quality.
+- Metric comparisons are name-matched and unit-aware but do not normalize currencies or fiscal periods.
+- Risk comparison detects matching labels, not semantic equivalence or proof that a risk disappeared.
+- Dashboard charts require structured analyses to be generated.
+- Agent verification is another model call, not a formal proof.
 
-```env
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=
-OPENAI_MODEL=gpt-4o-mini
-```
+## Next engineering improvements
 
-For a compatible provider, use the API base URL and model identifier documented by that provider. Leave `OPENAI_BASE_URL` empty for the default OpenAI endpoint. **Never commit your real API key.** The `.env` file is ignored by Git.
+OCR and page-aware citations; PostgreSQL + pgvector or Qdrant; background ingestion and batch embedding; retrieval evaluation (Recall@k, MRR, nDCG); authentication, RBAC, encryption, audit logging and tenant isolation; semantic risk matching and normalized financial metric comparison.
 
-Without a configured key, the app uses its local heuristic outline. That fallback is not an AI summary.
+## License
 
-### 5. Launch the app
-
-```bash
-streamlit run app.py
-```
-
-Streamlit prints a local address (usually `http://localhost:8501`) to open in your browser.
-
-### 6. Run the tests
-
-```bash
-pytest -q
-```
-
-## How it works
-
-1. **Input:** upload a PDF/TXT file or paste report text.
-2. **Extract:** read PDF text locally using `pypdf`; normalize whitespace.
-3. **Validate:** reject empty inputs and report text exceeding the 30,000-character processing limit.
-4. **Explain:** if AI is configured and enabled, send the extracted text to the selected provider with a structured prompt designed to avoid invented facts.
-5. **Export:** review the output and download it as Markdown.
-
-## Project layout
-
-```text
-report-explainer/
-├── app.py                    # Streamlit UI and AI workflow
-├── report_utils.py            # Text extraction, normalization, validation, fallback
-├── tests/
-│   └── test_report_utils.py   # Unit tests
-├── .github/
-│   └── workflows/
-│       └── tests.yml          # CI test workflow
-├── .env.example               # Safe configuration template
-├── .gitignore
-├── requirements.txt
-└── README.md
-```
-
-## Privacy and safety
-
-- Files are handled in the current app session; this project does not include an account system or document database.
-- When AI mode is used, extracted report text is sent to the configured AI provider. Review that provider's data handling terms before using confidential or personal information.
-- The app limits the text sent for explanation and validates input length, but this is a portfolio/demo app—not a hardened document-processing service.
-- Report text is untrusted input. The prompt instructs the model to treat embedded instructions as document content, but prompt injection cannot be eliminated by prompting alone.
-- AI can omit, misread, or invent claims. Check important figures and conclusions against the original report before making decisions.
-
-## Current limitations
-
-- **Scanned PDFs:** OCR is not included; image-only PDFs may yield no text.
-- **Local mode:** uses simple text heuristics and does not understand meaning.
-- **Provider compatibility:** custom endpoints must support the chat-completions API expected by the OpenAI SDK.
-- **No persistence:** reports and explanations are not saved to a database.
-
-## Roadmap
-
-- [ ] OCR support for scanned reports
-- [ ] Downloadable PDF report cards
-- [ ] Highlight source passages behind key findings
-- [ ] Optional report templates for research, business, and finance
-- [ ] Add more tests for PDF extraction and provider failures
-
-## Contributing
-
-Keep the project simple and focused. For changes to text processing, add or update unit tests and run `pytest -q` before opening a pull request.
-
+No license is currently declared. Unless a license is added, standard copyright restrictions apply.
