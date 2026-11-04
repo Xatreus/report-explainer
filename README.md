@@ -104,6 +104,3 @@ Configuration:
 
 OCR and page-aware citations; PostgreSQL + pgvector or Qdrant; background ingestion and batch embedding; retrieval evaluation (Recall@k, MRR, nDCG); authentication, RBAC, encryption, audit logging and tenant isolation; semantic risk matching and normalized financial metric comparison.
 
-## License
-
-No license is currently declared. Unless a license is added, standard copyright restrictions apply.
