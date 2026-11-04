@@ -1,156 +1,259 @@
-# Report Explainer — Document Intelligence Platform
+# Report Explainer
 
-Turn a folder of reports into a searchable, evidence-aware intelligence workspace. Ingest PDF/TXT documents, search with semantic and lexical retrieval, compare extracted findings, inspect metrics and risks, and run a bounded report-analysis agent.
+**Turn lengthy reports into answers you can inspect.**
 
-## Four capability layers
+Report Explainer is a local-first document intelligence workspace. Upload PDF and TXT reports, search across them, compare findings, explore extracted metrics and risks, and ask an AI analyst to explain what the documents actually say.
 
-### Phase 1 — Semantic RAG
-- Local sentence-transformer embeddings (default: all-MiniLM-L6-v2).
-- Persistent chunk embeddings in SQLite.
-- Dense vector similarity plus lexical ranking, fused using reciprocal-rank fusion.
-- Optional cross-encoder reranking (default: ms-marco-MiniLM-L-6-v2).
-- Source-aware Q&A with retrieved passages displayed for inspection.
+Built as a runnable portfolio project with a simple Streamlit interface and an optional AI provider. You can try the application without an API key; AI-generated explanations, comparisons and agent runs become available when you configure one.
 
-### Phase 2 — Multi-document intelligence
-- Upload up to 100 PDF/TXT reports per batch.
-- Deduplicate identical normalized content.
-- Search the whole workspace or selected reports.
-- Compare extracted metrics and identify newly listed, shared, and no-longer-listed risk labels.
-- Persist extracted analyses for repeat comparisons.
+<p align="center">
+  <strong>PDF/TXT ingestion · Hybrid RAG · Page-aware evidence · Multi-report analysis · AI agent</strong>
+</p>
 
-### Phase 3 — Document intelligence dashboard
-- Extract entities, numeric metrics, risks, action items and limitations.
-- Interactive metric charts and risk distribution charts.
-- Tables grouped by report and entity.
-- Metric comparisons retain units and periods; incompatible units are not treated as directly comparable.
+## What you can do
 
-### Phase 4 — Specialized report-analysis agent
-- Bounded tool-calling loop with configurable maximum rounds.
-- Allowlisted read-only tools: list reports, search reports, read report text.
-- Execution trace and separate evidence-auditing pass.
-
-## Architecture
-
-| Layer | Technology |
+| Capability | What it does |
 |---|---|
-| UI | Streamlit |
-| Extraction | pypdf |
-| Chunking | Overlapping word-window chunks |
-| Embeddings | sentence-transformers |
-| Vector storage | SQLite JSON vectors, cosine similarity |
-| Hybrid retrieval | Dense similarity + lexical ranking + reciprocal-rank fusion |
-| Reranking | Optional Sentence Transformers CrossEncoder |
-| LLM | OpenAI SDK / compatible chat-completions provider |
-| Analytics | JSON-structured extraction |
-| Dashboard | Plotly, pandas |
-| Agent | Bounded function calling and evidence verification |
-| Tests | pytest, GitHub Actions |
+| Explain a report | Upload a report or paste text; get a plain-language outline or AI explanation |
+| Search your library | Find relevant passages across multiple reports using semantic + lexical retrieval |
+| Evidence-grounded Q&A | Ask questions and inspect the passages and source IDs behind answers |
+| Page-aware citations | Preserve PDF page numbers and show them alongside retrieved passages |
+| Compare reports | Extract metrics, entities and risks, then compare two documents |
+| Intelligence dashboard | Explore extracted financial metrics, entities and risk distributions |
+| Report analyst | Run a bounded read-only agent that searches reports and checks its draft against retrieved evidence |
+| OCR (optional) | Extract text from scanned PDF pages when Tesseract and Poppler are installed |
 
-SQLite keeps setup manageable. The current vector index scans stored vectors in-process; it is suitable for a small portfolio workspace, not a high-throughput corpus. A dedicated vector database or ANN index can replace this layer later.
+## Interface
+
+The app is organized around six workspaces:
+
+1. **Workspace & upload** — build and manage your local report library.
+2. **Semantic search & Q&A** — retrieve passages and generate cited answers.
+3. **Compare reports** — inspect differences between two reports.
+4. **Intelligence dashboard** — view extracted metrics, risks and entities.
+5. **Report analyst** — run a bounded tool-using analysis workflow.
+6. **Explain one report** — the original single-report experience, including pasted text.
 
 ## Quick start
 
-Python 3.11+ is recommended. Semantic models run locally and may download several hundred MB on first use.
+### 1. Requirements
 
-1. Clone the repository: https://github.com/Xatreus/report-explainer
-2. Create a virtual environment: python -m venv .venv
-3. Activate it (PowerShell: .venv\\Scripts\\Activate.ps1; macOS/Linux: source .venv/bin/activate).
-4. Install core dependencies: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
-5. Install semantic models: python -m pip install -r requirements-ml.txt
-6. Copy .env.example to .env and configure the settings below.
-7. Run: streamlit run app.py
-8. Test: python -m pytest -q
+- Python 3.11 or newer
+- Git
+- Internet access for the first installation and first download of local embedding models
+- An LLM API key is optional; any OpenAI-compatible chat-completions provider can be configured
 
-The core requirements keep CI lightweight. The optional ML requirements install PyTorch/Transformers through sentence-transformers and may take longer or require substantial disk space. If PyTorch installation is platform-specific, install the appropriate CPU or CUDA build first, then install requirements-ml.txt.
+### 2. Clone and create an environment
 
-Configuration:
+```bash
+git clone https://github.com/Xatreus/report-explainer.git
+cd report-explainer
 
-    OPENAI_API_KEY=your_key
-    OPENAI_BASE_URL=
-    OPENAI_MODEL=gpt-4o-mini
-    EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-    RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
-    REPORT_DB_PATH=data/report_explainer.db
+python -m venv .venv
+```
 
-## How to use
+Activate it:
 
-1. Open Workspace & upload, select PDF/TXT files, and ingest them.
-2. Open Semantic search & Q&A, ask a question, inspect retrieved passages, and generate a cited answer.
-3. Use Compare reports to select baseline and later reports. Structured extraction is cached locally.
-4. Open Intelligence dashboard to inspect entities, metrics and risk distribution.
-5. Open Analysis agent, describe a cross-report objective, then inspect the tool trace and evidence-checked answer.
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+```
 
-## Privacy, safety and limitations
+```bash
+# macOS / Linux
+source .venv/bin/activate
+```
 
-- Reports, extracted analyses and embeddings are stored locally in SQLite at data/report_explainer.db by default. Do not commit this database.
-- Embedding and reranking models run locally after download. Initial model downloads require internet access.
-- LLM calls send report text, selected passages, or tool results to the configured provider. Review provider data terms before processing confidential documents.
-- The agent has an allowlist of read-only tools and a bounded call loop. It cannot execute arbitrary code or take external actions.
-- Prompt injection remains a risk. Documents are untrusted input; prompt instructions are defense-in-depth, not a security boundary.
-- Model-generated metrics and risk labels require human review. Source IDs point to stored chunks; they do not prove a claim.
-- This is still a portfolio application, not a hardened multi-tenant service. Security helpers and PostgreSQL tenant policies are present, but Streamlit login, persisted user management, end-to-end RBAC, quotas, encrypted backups and a production threat review remain unfinished.
+### 3. Install dependencies
 
-## Known limitations
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-ml.txt
+```
 
-- OCR requires the optional Python packages plus system Tesseract and Poppler binaries; if unavailable, extraction falls back to selectable PDF text.
-- SQLite vector search is an exact scan, not an approximate-nearest-neighbor index.
-- Lexical search is simple; multilingual retrieval depends on model and tokenization quality.
-- Supported scale units are normalized, but currencies and fiscal periods are not converted or reconciled.
-- Semantic risk matches are similarity candidates requiring human review, not proof of equivalent or resolved risks.
-- Dashboard charts require structured analyses to be generated.
-- Agent verification is another model call, not a formal proof.
+The core requirements install the UI, PDF parsing, charts and tests. The ML requirements install Sentence Transformers for local embeddings and optional reranking. This package may install PyTorch and can take a while. For a CPU-only machine, install the appropriate CPU PyTorch build first if your platform requires it.
 
-## Next engineering improvements
+### 4. Configure the optional AI provider
 
-Complete production identity integration and end-to-end RBAC; build a labelled retrieval benchmark; add encrypted backups, key rotation and operational monitoring; evaluate semantic risk matching against human-labelled pairs; reconcile fiscal periods and financial statement definitions.
+Copy `.env.example` to `.env` and set:
 
+```dotenv
+OPENAI_API_KEY=your_api_key
+OPENAI_BASE_URL=
+OPENAI_MODEL=gpt-4o-mini
+```
 
-## Next-stage infrastructure
+Leave `OPENAI_API_KEY` empty to use the local heuristic outline and local retrieval features. No API key is needed to launch the app or index documents. AI explanations, generated answers, report comparisons and the report analyst require a configured chat-completions provider.
 
-The next engineering layer is available as optional modules so the default SQLite demo remains easy to run.
+### 5. Launch
 
-### OCR and page-aware citations
-- document_pipeline.py extracts selectable PDF text page-by-page and attempts OCR on sparse pages.
-- Chunks retain page_start, page_end, and whether text came from PDF extraction or OCR.
-- The SQLite workspace stores this provenance and displays the page beside retrieved passages.
-- Install requirements-ocr.txt and the system Tesseract + Poppler binaries to enable OCR. Without them, selectable PDF text still works.
+```bash
+streamlit run app.py
+```
+
+Open the local URL printed by Streamlit (normally http://localhost:8501).
+
+### 6. Run tests
+
+```bash
+python -m pytest -q
+```
+
+## First run walkthrough
+
+Two fictional sample reports are included in `sample_reports/` so you can explore multi-report search and comparison immediately. Upload `northstar_q1.txt` and `northstar_q2.txt` from that folder in the workspace tab.
+
+1. Open **Workspace & upload** and add a PDF or TXT report. You can select multiple reports.
+2. Wait for local embeddings to be generated. The first run downloads the embedding model; later runs reuse the cached model.
+3. Open **Semantic search & Q&A**, ask a question, and inspect the retrieved source passages.
+4. If an API key is configured, generate an answer grounded in those passages.
+5. Upload a second report and use **Compare reports** to extract and compare structured findings.
+6. Explore the **Intelligence dashboard** and try the **Report analyst** on a cross-report question.
+7. Use **Explain one report** for a quick explanation of a single PDF, TXT file or pasted text.
+
+## How it works
+
+```text
+PDF / TXT
+   |
+   v
+Text extraction ---- optional OCR for scanned PDF pages
+   |
+   v
+Page-aware overlapping chunks
+   |
+   v
+Local sentence-transformer embeddings
+   |
+   v
+SQLite document + chunk store
+   |
+   v
+Hybrid retrieval (dense + lexical) -> reciprocal-rank fusion
+   |
+   +--> optional cross-encoder reranking
+   |
+   +--> cited Q&A
+   +--> multi-report structured extraction and comparison
+   +--> dashboard
+   +--> bounded report-analysis agent
+```
+
+### Main stack
+
+- **Python 3.11+** — application and processing
+- **Streamlit** — interactive web interface
+- **pypdf** — PDF text extraction
+- **Sentence Transformers** — local embeddings and optional reranking
+- **SQLite** — local document, chunk, embedding and analysis storage
+- **Plotly + pandas** — interactive charts and tables
+- **OpenAI Python SDK** — OpenAI-compatible LLM integration
+- **pytest + GitHub Actions** — automated tests
+
+## Optional capabilities
+
+The normal portfolio setup uses SQLite and does not require PostgreSQL, Redis, Docker, or an OCR system binary. The following are optional extensions.
+
+### OCR for scanned PDFs
+
+Install:
+
+```bash
+python -m pip install -r requirements-ocr.txt
+```
+
+Also install **Tesseract OCR** and **Poppler** for your operating system. The application attempts OCR on pages with little selectable text. If the optional OCR runtime is unavailable, selectable PDF text extraction remains available. OCR quality depends on scan quality and language packs.
 
 ### PostgreSQL + pgvector
-- postgres_store.py is the optional tenant-scoped vector backend. It creates pgvector embeddings and an HNSW cosine index.
-- It enables and forces PostgreSQL row-level security on report, chunk, and audit tables. Application queries also filter by tenant.
-- The document/chunk foreign key includes tenant ID; deterministic IDs are tenant-scoped.
-- Requires PostgreSQL with pgvector installed and permission to create the extension. Configure DATABASE_URL.
-- The current Streamlit default remains SQLite. Use the background ingestion option to write to PostgreSQL; this is a separate deployment path, not an automatic migration of existing SQLite data.
 
-### Background ingestion and batching
-- ingestion_worker.py provides Redis/RQ enqueue and worker functions for PDF/TXT files.
-- DocumentStore.ingest batches local embedding calls. The PostgreSQL worker embeds chunks in bounded batches (EMBED_BATCH_SIZE).
-- Install requirements-worker.txt, configure REDIS_URL and TENANT_ID, and run an RQ worker with rq worker reports.
-- Treat Redis as trusted infrastructure: restrict network access and credentials. Do not expose tenant ID as an unauthenticated client-controlled field.
+Install:
+
+```bash
+python -m pip install -r requirements-prod.txt
+```
+
+Configure `DATABASE_URL` for a PostgreSQL server with pgvector installed. `postgres_store.py` provides an optional tenant-scoped vector store, HNSW index, row-level security policies, audit events and optional Fernet encryption. This is a separate backend path; it does not automatically migrate the default SQLite database.
+
+### Redis background ingestion
+
+Install:
+
+```bash
+python -m pip install -r requirements-worker.txt
+```
+
+Configure `REDIS_URL` and `DATABASE_URL`, then run an RQ worker:
+
+```bash
+rq worker reports
+```
+
+The worker supports PDF/TXT ingestion and bounded batch embeddings. These advanced modules are included for architecture exploration; the standard UI workflow uses local SQLite ingestion.
 
 ### Retrieval evaluation
-retrieval_eval.py computes Recall@k, MRR and nDCG@k. Use query IDs mapped to ranked chunk IDs and graded relevance judgments (qrels) to evaluate a test set. These are metrics utilities; a representative, human-labelled evaluation dataset still needs to be created before reporting real retrieval quality.
 
-### Security, access control and encryption
-- security.py provides PBKDF2 password hashing, HMAC-signed expiring sessions, role-permission checks, Fernet text encryption/decryption and audit-event insertion.
-- PostgreSQL stores report and chunk text encrypted when FERNET_KEY is configured. Generate and back up this key securely; losing it makes encrypted text unrecoverable.
-- The PostgreSQL schema includes tenant-aware row-level security and audit events. Worker ingestion writes an audit record.
-- These are security building blocks, not a complete production identity system: the Streamlit app does not yet have a user-registration/login UI or a persisted user directory, and every UI action is not yet wired through RBAC. A production deployment must validate identity server-side, derive tenant IDs from the authenticated principal, use a restricted database role, enforce TLS, rotate secrets, and review backups/logs.
+`retrieval_eval.py` calculates:
 
-### Semantic risk and normalized metric comparison
-- Risk matching uses local sentence embeddings when the optional ML stack is installed, with a fuzzy lexical fallback. Matches include a score and require human review.
-- Metric comparison normalizes supported scales (for example thousand/million USD, bytes and time units). It deliberately does not convert between currencies or incompatible units without a trusted exchange-rate source.
-- Extracted values and periods still require review; matching names alone do not establish accounting equivalence.
+- Recall@k
+- Mean Reciprocal Rank (MRR)
+- Normalized Discounted Cumulative Gain (nDCG@k)
 
-### Optional installation
+The functions accept ranked result IDs and relevance judgments. A representative, human-labelled benchmark dataset is needed before interpreting scores as actual system quality.
 
-    python -m pip install -r requirements-ml.txt
-    python -m pip install -r requirements-ocr.txt
-    python -m pip install -r requirements-prod.txt
-    python -m pip install -r requirements-worker.txt
+## Configuration reference
 
-The OCR package also requires Tesseract and Poppler installed at the operating-system level. PostgreSQL requires a pgvector-enabled server. Keep core requirements.txt lightweight for local tests and the basic SQLite app.
+| Variable | Purpose | Default |
+|---|---|---|
+| `OPENAI_API_KEY` | Optional LLM provider key | Empty |
+| `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint | Provider default |
+| `OPENAI_MODEL` | Chat model name | `gpt-4o-mini` |
+| `EMBEDDING_MODEL` | Local embedding model | `sentence-transformers/all-MiniLM-L6-v2` |
+| `RERANKER_MODEL` | Optional cross-encoder model | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| `REPORT_DB_PATH` | Local SQLite database path | `data/report_explainer.db` |
+| `DATABASE_URL` | Optional PostgreSQL connection | Not used by default |
+| `REDIS_URL` | Optional worker queue | Not used by default |
+| `FERNET_KEY` | Optional PostgreSQL text encryption key | Not used by default |
+
+## Project structure
+
+```text
+report-explainer/
+├── app.py                  # Streamlit application and UI
+├── report_utils.py         # Text validation, chunking and local retrieval
+├── document_pipeline.py    # Page-aware PDF extraction and optional OCR
+├── document_store.py       # SQLite persistence and hybrid retrieval
+├── analytics.py            # Structured report comparison and risk matching
+├── analysis_agent.py       # Bounded read-only report analysis agent
+├── retrieval_eval.py       # Recall@k, MRR and nDCG evaluation
+├── security.py             # Reusable security primitives
+├── postgres_store.py       # Optional PostgreSQL + pgvector backend
+├── ingestion_worker.py     # Optional Redis/RQ ingestion worker
+├── requirements.txt        # Core application dependencies
+├── requirements-ml.txt     # Local embeddings and reranking
+├── requirements-ocr.txt    # Optional OCR Python dependencies
+├── requirements-prod.txt   # Optional PostgreSQL dependencies
+├── requirements-worker.txt # Optional background worker dependencies
+└── tests/                  # Unit and integration-style tests
+```
+
+## Privacy and limitations
+
+- **Local by default:** uploaded documents, extracted analyses and embeddings are stored in the local SQLite database at `data/report_explainer.db`.
+- **Local models:** embeddings and reranking run locally after model downloads.
+- **External AI calls:** when an LLM provider is configured, report text or retrieved passages are sent to that provider for generation. Review its data policy before uploading confidential material.
+- **Evidence matters:** generated summaries, extracted metrics and risk labels can be wrong. Inspect the original passage and source citation before relying on them.
+- **Agent boundaries:** the report analyst has a bounded tool loop and read-only tools. This is not a guarantee against prompt injection or incorrect model output.
+- **OCR:** scanned-page recognition depends on installed binaries, language packs and image quality.
+- **Scale:** SQLite vector search is suitable for a personal or small portfolio workspace, not a large production corpus.
+- **Financial comparisons:** supported scale units are normalized, but currencies and fiscal periods are not automatically reconciled.
+- **Risk matching:** similarity scores identify candidate matches, not proof that two risks are identical or that a risk has been resolved.
+- **Advanced backend:** PostgreSQL/RLS, Redis workers and security helpers are optional reference implementations, not a fully deployed multi-user service.
+
+## Tests and CI
+
+GitHub Actions runs the core test suite on Python 3.12 for pushes and pull requests. Optional OCR, PostgreSQL and Redis services are not required by the core CI job.
 
 ## License
 
-No license is currently declared. Unless a license is added, standard copyright restrictions apply.
+No license is currently declared. Add a license file if you want to explicitly grant others permission to reuse, modify or distribute this project.
