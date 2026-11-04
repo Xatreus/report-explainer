@@ -1,143 +1,105 @@
-# Report Explainer
+# Report Explainer — Document Intelligence Platform
 
-**Turn dense reports into understandable, searchable, evidence-aware insights.** Upload a PDF or text file, ask questions in natural language, and explore key entities, metrics, risks, and action items.
+Turn a folder of reports into a searchable, evidence-aware intelligence workspace. Ingest PDF/TXT documents, search with semantic and lexical retrieval, compare extracted findings, inspect metrics and risks, and run a bounded report-analysis agent.
 
-Report Explainer is a focused Python application demonstrating practical GenAI, retrieval, source grounding, and document intelligence without unnecessary agent infrastructure.
+## Four capability layers
 
-## Features
+### Phase 1 — Semantic RAG
+- Local sentence-transformer embeddings (default: all-MiniLM-L6-v2).
+- Persistent chunk embeddings in SQLite.
+- Dense vector similarity plus lexical ranking, fused using reciprocal-rank fusion.
+- Optional cross-encoder reranking (default: ms-marco-MiniLM-L-6-v2).
+- Source-aware Q&A with retrieved passages displayed for inspection.
 
-- 📄 **PDF and TXT ingestion** — extract selectable PDF text, read text files, or paste content.
-- 🧠 **Audience-aware explanations** — plain-language summaries tailored to readers, students, business leaders, technical readers, or researchers.
-- 🌐 **Multilingual output** — English, Hindi, Arabic, and Urdu.
-- 🔎 **Ask your report (RAG-style Q&A)** — chunk the document, retrieve relevant passages with a lightweight BM25-style lexical ranker, and answer questions using only retrieved context.
-- 📌 **Source-grounded answers** — retrieved passages receive stable source IDs (for example, [S1]) that the model can cite and users can inspect.
-- 🧾 **Structured report review** — extract key entities, important metrics, risks, action items, and missing information into a consistent format.
-- 📴 **Local fallback** — generate a clearly labelled heuristic outline without an API key.
-- ⬇️ **Markdown exports** — download explanations, question answers, and structured reviews.
-- 🧪 **Automated tests** — regression tests cover normalization, validation, chunking, retrieval, and local fallback.
+### Phase 2 — Multi-document intelligence
+- Upload up to 100 PDF/TXT reports per batch.
+- Deduplicate identical normalized content.
+- Search the whole workspace or selected reports.
+- Compare extracted metrics and identify newly listed, shared, and no-longer-listed risk labels.
+- Persist extracted analyses for repeat comparisons.
 
-## Architecture and stack
+### Phase 3 — Document intelligence dashboard
+- Extract entities, numeric metrics, risks, action items and limitations.
+- Interactive metric charts and risk distribution charts.
+- Tables grouped by report and entity.
+- Metric comparisons retain units and periods; incompatible units are not treated as directly comparable.
 
-| Layer | Implementation |
+### Phase 4 — Specialized report-analysis agent
+- Bounded tool-calling loop with configurable maximum rounds.
+- Allowlisted read-only tools: list reports, search reports, read report text.
+- Execution trace and separate evidence-auditing pass.
+
+## Architecture
+
+| Layer | Technology |
 |---|---|
 | UI | Streamlit |
-| Language | Python |
-| Document ingestion | pypdf, TXT |
-| Text processing | Normalization, overlapping chunking |
-| Retrieval | BM25-style lexical ranking (standard library) |
-| Generation | OpenAI Python SDK with OpenAI-compatible chat-completions endpoints |
-| Prompting | Grounded Q&A, structured extraction, audience-aware explanation |
-| Configuration | python-dotenv |
-| Quality | pytest, GitHub Actions |
+| Extraction | pypdf |
+| Chunking | Overlapping word-window chunks |
+| Embeddings | sentence-transformers |
+| Vector storage | SQLite JSON vectors, cosine similarity |
+| Hybrid retrieval | Dense similarity + lexical ranking + reciprocal-rank fusion |
+| Reranking | Optional Sentence Transformers CrossEncoder |
+| LLM | OpenAI SDK / compatible chat-completions provider |
+| Analytics | JSON-structured extraction |
+| Dashboard | Plotly, pandas |
+| Agent | Bounded function calling and evidence verification |
+| Tests | pytest, GitHub Actions |
 
-The retrieval layer is intentionally lightweight and runs in memory. It does not require a vector database or embedding API, keeping setup simple and predictable. This is lexical retrieval, not semantic vector search.
+SQLite keeps setup manageable. The current vector index scans stored vectors in-process; it is suitable for a small portfolio workspace, not a high-throughput corpus. A dedicated vector database or ANN index can replace this layer later.
 
 ## Quick start
 
-### Requirements
+Python 3.11+ is recommended. Semantic models run locally and may download several hundred MB on first use.
 
-- Python 3.11+
-- An API key from a supported OpenAI-compatible provider for AI explanations, Q&A, and structured extraction (optional for local outline mode)
+1. Clone the repository: https://github.com/Xatreus/report-explainer
+2. Create a virtual environment: python -m venv .venv
+3. Activate it (PowerShell: .venv\\Scripts\\Activate.ps1; macOS/Linux: source .venv/bin/activate).
+4. Install: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+5. Copy .env.example to .env and configure the settings below.
+6. Run: streamlit run app.py
+7. Test: python -m pytest -q
 
-### 1. Clone
+Configuration:
 
-```bash
-git clone https://github.com/Xatreus/report-explainer.git
-cd report-explainer
-```
+    OPENAI_API_KEY=your_key
+    OPENAI_BASE_URL=
+    OPENAI_MODEL=gpt-4o-mini
+    EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+    RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+    REPORT_DB_PATH=data/report_explainer.db
 
-### 2. Create a virtual environment
+## How to use
 
-**Windows PowerShell**
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
+1. Open Workspace & upload, select PDF/TXT files, and ingest them.
+2. Open Semantic search & Q&A, ask a question, inspect retrieved passages, and generate a cited answer.
+3. Use Compare reports to select baseline and later reports. Structured extraction is cached locally.
+4. Open Intelligence dashboard to inspect entities, metrics and risk distribution.
+5. Open Analysis agent, describe a cross-report objective, then inspect the tool trace and evidence-checked answer.
 
-**macOS / Linux**
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+## Privacy, safety and limitations
 
-### 3. Install dependencies
+- Reports, extracted analyses and embeddings are stored locally in SQLite at data/report_explainer.db by default. Do not commit this database.
+- Embedding and reranking models run locally after download. Initial model downloads require internet access.
+- LLM calls send report text, selected passages, or tool results to the configured provider. Review provider data terms before processing confidential documents.
+- The agent has an allowlist of read-only tools and a bounded call loop. It cannot execute arbitrary code or take external actions.
+- Prompt injection remains a risk. Documents are untrusted input; prompt instructions are defense-in-depth, not a security boundary.
+- Model-generated metrics and risk labels require human review. Source IDs point to stored chunks; they do not prove a claim.
+- This is a portfolio application, not a hardened multi-tenant service. Authentication, authorization, encryption-at-rest, quotas, background workers, backups and tenant isolation are not implemented.
 
-```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
+## Known limitations
 
-### 4. Configure an AI provider (optional)
+- OCR for scanned PDFs is not included.
+- SQLite vector search is an exact scan, not an approximate-nearest-neighbor index.
+- Lexical search is simple; multilingual retrieval depends on model and tokenization quality.
+- Metric comparisons are name-matched and unit-aware but do not normalize currencies or fiscal periods.
+- Risk comparison detects matching labels, not semantic equivalence or proof that a risk disappeared.
+- Dashboard charts require structured analyses to be generated.
+- Agent verification is another model call, not a formal proof.
 
-Copy `.env.example` to `.env`:
+## Next engineering improvements
 
-```env
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=
-OPENAI_MODEL=gpt-4o-mini
-```
-
-Use the base URL and model identifier documented by your provider. Leave `OPENAI_BASE_URL` empty for the default OpenAI endpoint. Never commit real API credentials; `.env` is ignored by Git.
-
-Without a key, the app still supports a local heuristic outline. AI-powered Q&A and structured extraction require a configured provider.
-
-### 5. Run
-
-```bash
-streamlit run app.py
-```
-
-### 6. Test
-
-```bash
-python -m pytest -q
-```
-
-## How retrieval works
-
-1. Extract and normalize the uploaded report text.
-2. Split it into overlapping passages and assign source IDs.
-3. Tokenize the user's question and each passage.
-4. Rank passages using a BM25-style lexical relevance score.
-5. Send the highest-ranked passages to the model with instructions to answer only from those sources and cite their IDs.
-6. Display the answer and the exact retrieved passages for inspection.
-
-This is a small, transparent RAG-style pipeline. It uses lexical matching rather than embeddings, so it may miss relevant passages that use very different wording. The next retrieval upgrade could add embeddings and hybrid dense/sparse search.
-
-## Project layout
-
-```text
-report-explainer/
-├── app.py                    # Streamlit UI, explanation, Q&A, structured review
-├── report_utils.py            # Extraction, normalization, chunking, retrieval, fallback
-├── tests/
-│   └── test_report_utils.py   # Unit and retrieval regression tests
-├── .github/workflows/
-│   └── tests.yml              # GitHub Actions test workflow
-├── .env.example
-├── .gitignore
-├── requirements.txt
-└── README.md
-```
-
-## Privacy, safety, and limitations
-
-- Documents are processed in the current Streamlit session; there is no account system or persistent document database.
-- AI features send the full report for explanation/extraction or selected passages for Q&A to the configured provider. Check its data-handling terms before using confidential information.
-- Retrieval is lexical BM25-style ranking, not embedding-based semantic search; paraphrased queries may retrieve poorly.
-- Source IDs identify retrieved text passages; they are not external references or proof that a model's interpretation is correct. Verify important claims against the original report.
-- Report text is untrusted input. Prompt instructions reduce the risk of following embedded instructions but do not eliminate prompt injection.
-- Scanned PDFs need OCR, which is not included.
-- This is a portfolio/demo app, not a hardened document-processing service.
-
-## Roadmap
-
-- [ ] OCR for scanned PDFs
-- [ ] Embedding-based semantic and hybrid retrieval
-- [ ] Compare two reports and highlight changes
-- [ ] Optional PostgreSQL persistence for saved workspaces
-- [ ] Export polished PDF report cards
-- [ ] Add evaluation datasets for retrieval quality and answer groundedness
+OCR and page-aware citations; PostgreSQL + pgvector or Qdrant; background ingestion and batch embedding; retrieval evaluation (Recall@k, MRR, nDCG); authentication, RBAC, encryption, audit logging and tenant isolation; semantic risk matching and normalized financial metric comparison.
 
 ## License
 
