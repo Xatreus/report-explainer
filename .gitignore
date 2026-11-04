@@ -209,3 +209,9 @@ __marimo__/
 # Local application configuration
 .env
 .streamlit/secrets.toml
+
+# Report Explainer local document store and model caches
+data/
+*.db
+*.sqlite
+*.sqlite3
