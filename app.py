@@ -47,6 +47,9 @@ tabs = st.tabs(["Workspace & upload", "Semantic search & Q&A", "Compare reports"
 
 with tabs[0]:
     st.subheader("Upload a collection of reports")
+    queue_background = st.checkbox("Use Redis background ingestion + PostgreSQL (optional deployment)", value=False)
+    if queue_background:
+        st.caption("Requires DATABASE_URL, REDIS_URL, TENANT_ID, requirements-worker.txt, and a running RQ worker.")
     files = st.file_uploader("Select up to 100 PDF or TXT reports", type=["pdf", "txt"], accept_multiple_files=True)
     if files:
         if len(files) > 100:
@@ -56,6 +59,12 @@ with tabs[0]:
             for index, file in enumerate(files):
                 try:
                     raw = file.getvalue()
+                    if queue_background:
+                        from ingestion_worker import enqueue_ingestion
+                        job = enqueue_ingestion(file.name, raw, os.getenv("TENANT_ID", ""))
+                        st.write(f"Queued {file.name} · job {job.id}")
+                        progress.progress((index + 1) / len(files))
+                        continue
                     pages = extract_pdf_pages(raw, ocr_if_empty=True) if file.name.lower().endswith(".pdf") else None
                     content = "\n\n".join(page["text"] for page in pages) if pages is not None else raw.decode("utf-8", errors="replace")
                     valid, reason = validate_text(normalize_text(content), max_chars=2_000_000)
