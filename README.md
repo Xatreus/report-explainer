@@ -102,6 +102,8 @@ python -m pytest -q
 
 ## First run walkthrough
 
+Two fictional sample reports are included in `sample_reports/` so you can explore multi-report search and comparison immediately. Upload `northstar_q1.txt` and `northstar_q2.txt` from that folder in the workspace tab.
+
 1. Open **Workspace & upload** and add a PDF or TXT report. You can select multiple reports.
 2. Wait for local embeddings to be generated. The first run downloads the embedding model; later runs reuse the cached model.
 3. Open **Semantic search & Q&A**, ask a question, and inspect the retrieved source passages.
