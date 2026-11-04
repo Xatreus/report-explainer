@@ -88,21 +88,21 @@ Configuration:
 - The agent has an allowlist of read-only tools and a bounded call loop. It cannot execute arbitrary code or take external actions.
 - Prompt injection remains a risk. Documents are untrusted input; prompt instructions are defense-in-depth, not a security boundary.
 - Model-generated metrics and risk labels require human review. Source IDs point to stored chunks; they do not prove a claim.
-- This is a portfolio application, not a hardened multi-tenant service. Authentication, authorization, encryption-at-rest, quotas, background workers, backups and tenant isolation are not implemented.
+- This is still a portfolio application, not a hardened multi-tenant service. Security helpers and PostgreSQL tenant policies are present, but Streamlit login, persisted user management, end-to-end RBAC, quotas, encrypted backups and a production threat review remain unfinished.
 
 ## Known limitations
 
-- OCR for scanned PDFs is not included.
+- OCR requires the optional Python packages plus system Tesseract and Poppler binaries; if unavailable, extraction falls back to selectable PDF text.
 - SQLite vector search is an exact scan, not an approximate-nearest-neighbor index.
 - Lexical search is simple; multilingual retrieval depends on model and tokenization quality.
-- Metric comparisons are name-matched and unit-aware but do not normalize currencies or fiscal periods.
-- Risk comparison detects matching labels, not semantic equivalence or proof that a risk disappeared.
+- Supported scale units are normalized, but currencies and fiscal periods are not converted or reconciled.
+- Semantic risk matches are similarity candidates requiring human review, not proof of equivalent or resolved risks.
 - Dashboard charts require structured analyses to be generated.
 - Agent verification is another model call, not a formal proof.
 
 ## Next engineering improvements
 
-OCR and page-aware citations; PostgreSQL + pgvector or Qdrant; background ingestion and batch embedding; retrieval evaluation (Recall@k, MRR, nDCG); authentication, RBAC, encryption, audit logging and tenant isolation; semantic risk matching and normalized financial metric comparison.
+Complete production identity integration and end-to-end RBAC; build a labelled retrieval benchmark; add encrypted backups, key rotation and operational monitoring; evaluate semantic risk matching against human-labelled pairs; reconcile fiscal periods and financial statement definitions.
 
 
 ## Next-stage infrastructure
