@@ -17,7 +17,7 @@ def extract_pdf_pages(data:bytes,*,ocr_if_empty:bool=True,language:str="eng",min
     image=convert_from_bytes(data,first_page=number,last_page=number)[0]
     ocr=normalize_text(pytesseract.image_to_string(image,lang=language))
     if len(ocr)>len(text): text,source=ocr,"ocr"
-   except (ImportError,OSError): pass
+   except Exception: pass
   pages.append({"page":number,"text":text,"extraction":source})
  return pages
 
