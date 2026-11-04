@@ -104,6 +104,53 @@ Configuration:
 
 OCR and page-aware citations; PostgreSQL + pgvector or Qdrant; background ingestion and batch embedding; retrieval evaluation (Recall@k, MRR, nDCG); authentication, RBAC, encryption, audit logging and tenant isolation; semantic risk matching and normalized financial metric comparison.
 
+
+## Next-stage infrastructure
+
+The next engineering layer is available as optional modules so the default SQLite demo remains easy to run.
+
+### OCR and page-aware citations
+- document_pipeline.py extracts selectable PDF text page-by-page and attempts OCR on sparse pages.
+- Chunks retain page_start, page_end, and whether text came from PDF extraction or OCR.
+- The SQLite workspace stores this provenance and displays the page beside retrieved passages.
+- Install requirements-ocr.txt and the system Tesseract + Poppler binaries to enable OCR. Without them, selectable PDF text still works.
+
+### PostgreSQL + pgvector
+- postgres_store.py is the optional tenant-scoped vector backend. It creates pgvector embeddings and an HNSW cosine index.
+- It enables and forces PostgreSQL row-level security on report, chunk, and audit tables. Application queries also filter by tenant.
+- The document/chunk foreign key includes tenant ID; deterministic IDs are tenant-scoped.
+- Requires PostgreSQL with pgvector installed and permission to create the extension. Configure DATABASE_URL.
+- The current Streamlit default remains SQLite. Use the background ingestion option to write to PostgreSQL; this is a separate deployment path, not an automatic migration of existing SQLite data.
+
+### Background ingestion and batching
+- ingestion_worker.py provides Redis/RQ enqueue and worker functions for PDF/TXT files.
+- DocumentStore.ingest batches local embedding calls. The PostgreSQL worker embeds chunks in bounded batches (EMBED_BATCH_SIZE).
+- Install requirements-worker.txt, configure REDIS_URL and TENANT_ID, and run an RQ worker with rq worker reports.
+- Treat Redis as trusted infrastructure: restrict network access and credentials. Do not expose tenant ID as an unauthenticated client-controlled field.
+
+### Retrieval evaluation
+retrieval_eval.py computes Recall@k, MRR and nDCG@k. Use query IDs mapped to ranked chunk IDs and graded relevance judgments (qrels) to evaluate a test set. These are metrics utilities; a representative, human-labelled evaluation dataset still needs to be created before reporting real retrieval quality.
+
+### Security, access control and encryption
+- security.py provides PBKDF2 password hashing, HMAC-signed expiring sessions, role-permission checks, Fernet text encryption/decryption and audit-event insertion.
+- PostgreSQL stores report and chunk text encrypted when FERNET_KEY is configured. Generate and back up this key securely; losing it makes encrypted text unrecoverable.
+- The PostgreSQL schema includes tenant-aware row-level security and audit events. Worker ingestion writes an audit record.
+- These are security building blocks, not a complete production identity system: the Streamlit app does not yet have a user-registration/login UI or a persisted user directory, and every UI action is not yet wired through RBAC. A production deployment must validate identity server-side, derive tenant IDs from the authenticated principal, use a restricted database role, enforce TLS, rotate secrets, and review backups/logs.
+
+### Semantic risk and normalized metric comparison
+- Risk matching uses local sentence embeddings when the optional ML stack is installed, with a fuzzy lexical fallback. Matches include a score and require human review.
+- Metric comparison normalizes supported scales (for example thousand/million USD, bytes and time units). It deliberately does not convert between currencies or incompatible units without a trusted exchange-rate source.
+- Extracted values and periods still require review; matching names alone do not establish accounting equivalence.
+
+### Optional installation
+
+    python -m pip install -r requirements-ml.txt
+    python -m pip install -r requirements-ocr.txt
+    python -m pip install -r requirements-prod.txt
+    python -m pip install -r requirements-worker.txt
+
+The OCR package also requires Tesseract and Poppler installed at the operating-system level. PostgreSQL requires a pgvector-enabled server. Keep core requirements.txt lightweight for local tests and the basic SQLite app.
+
 ## License
 
 No license is currently declared. Unless a license is added, standard copyright restrictions apply.
