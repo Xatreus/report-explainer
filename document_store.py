@@ -57,7 +57,7 @@ class DocumentStore:
             try:
                 from sentence_transformers import CrossEncoder
             except ImportError as exc:
-                raise RuntimeError("Reranking requires sentence-transformers; install requirements.txt.") from exc
+                raise RuntimeError("Reranking requires sentence-transformers; install requirements-ml.txt.") from exc
             name = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
             self._reranker = CrossEncoder(name)
         return self._reranker
@@ -67,6 +67,8 @@ class DocumentStore:
         return [float(x) for x in (value.tolist() if hasattr(value, "tolist") else value)]
 
     def ingest(self, file_name, text, pages=None, batch_size=32):
+        if batch_size < 1:
+            raise ValueError('batch_size must be at least 1.')
         normalized = normalize_text(text)
         if not normalized:
             raise ValueError("The document contains no extractable text.")
