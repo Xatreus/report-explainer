@@ -20,6 +20,7 @@ class PgVectorStore:
    "CREATE INDEX IF NOT EXISTS idx_report_chunks_tenant_doc ON report_chunks(tenant_id,document_id)",
    "CREATE INDEX IF NOT EXISTS idx_report_chunks_embedding ON report_chunks USING hnsw (embedding vector_cosine_ops)",
    "ALTER TABLE report_documents ENABLE ROW LEVEL SECURITY","ALTER TABLE report_chunks ENABLE ROW LEVEL SECURITY","ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY",
+   "ALTER TABLE report_documents FORCE ROW LEVEL SECURITY","ALTER TABLE report_chunks FORCE ROW LEVEL SECURITY","ALTER TABLE audit_events FORCE ROW LEVEL SECURITY",
    """DO $$ BEGIN CREATE POLICY tenant_docs_policy ON report_documents USING (tenant_id=current_setting('app.tenant_id',true)) WITH CHECK (tenant_id=current_setting('app.tenant_id',true)); EXCEPTION WHEN duplicate_object THEN NULL; END $$""",
    """DO $$ BEGIN CREATE POLICY tenant_chunks_policy ON report_chunks USING (tenant_id=current_setting('app.tenant_id',true)) WITH CHECK (tenant_id=current_setting('app.tenant_id',true)); EXCEPTION WHEN duplicate_object THEN NULL; END $$""",
    """DO $$ BEGIN CREATE POLICY tenant_audit_policy ON audit_events USING (tenant_id=current_setting('app.tenant_id',true)) WITH CHECK (tenant_id=current_setting('app.tenant_id',true)); EXCEPTION WHEN duplicate_object THEN NULL; END $$"""]
