@@ -6,7 +6,7 @@ import streamlit as st
 import plotly.express as px
 from dotenv import load_dotenv
 from openai import OpenAI
-from analytics import ANALYSIS_SCHEMA, compare_report_analyses, parse_json_object
+from analytics import ANALYSIS_SCHEMA, compare_report_analyses, match_semantic_risks, parse_json_object
 from analysis_agent import run_report_agent
 from document_store import DocumentStore
 from document_pipeline import extract_pdf_pages
@@ -165,7 +165,13 @@ with tabs[2]:
                     col1.write(diff["new_risks"] or "None identified")
                     col2.markdown("**No longer listed risks**")
                     col2.write(diff["risks_no_longer_listed"] or "None identified")
-                    st.caption("This is a comparison of extracted labels and metrics, not proof that an unlisted risk has disappeared.")
+                    risk_diff = match_semantic_risks(analyses[0].get("risks", []), analyses[1].get("risks", []))
+                    st.markdown("### Similar risks across reports")
+                    if risk_diff["matches"]:
+                        st.dataframe(risk_diff["matches"], use_container_width=True, hide_index=True)
+                    else:
+                        st.write("No likely matching risk labels found.")
+                    st.caption(risk_diff["note"] + " Unmatched risks are not proof of resolution.")
                 except Exception as exc:
                     st.error(f"Comparison failed: {exc}")
 
