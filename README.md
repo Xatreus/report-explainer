@@ -55,10 +55,13 @@ Python 3.11+ is recommended. Semantic models run locally and may download severa
 1. Clone the repository: https://github.com/Xatreus/report-explainer
 2. Create a virtual environment: python -m venv .venv
 3. Activate it (PowerShell: .venv\\Scripts\\Activate.ps1; macOS/Linux: source .venv/bin/activate).
-4. Install: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
-5. Copy .env.example to .env and configure the settings below.
-6. Run: streamlit run app.py
-7. Test: python -m pytest -q
+4. Install core dependencies: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+5. Install semantic models: python -m pip install -r requirements-ml.txt
+6. Copy .env.example to .env and configure the settings below.
+7. Run: streamlit run app.py
+8. Test: python -m pytest -q
+
+The core requirements keep CI lightweight. The optional ML requirements install PyTorch/Transformers through sentence-transformers and may take longer or require substantial disk space. If PyTorch installation is platform-specific, install the appropriate CPU or CUDA build first, then install requirements-ml.txt.
 
 Configuration:
 
