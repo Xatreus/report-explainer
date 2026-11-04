@@ -45,10 +45,142 @@ def compare_report_analyses(left: dict[str, Any], right: dict[str, Any]) -> dict
     shared = []
     for key in sorted(old_metrics.keys() & new_metrics.keys()):
         old, new = old_metrics[key], new_metrics[key]
-        shared.append({"name": new["name"], "earlier_value": old["value"], "later_value": new["value"],
-                       "earlier_unit": old.get("unit", ""), "later_unit": new.get("unit", ""),
-                       "comparable_units": old.get("unit", "").casefold() == new.get("unit", "").casefold()})
+        shared.append(compare_metric_values(old, new))
     old_risks = {x["title"].casefold() for x in left.get("risks", [])}
     new_risks = {x["title"].casefold() for x in right.get("risks", [])}
     return {"shared_metrics": shared, "new_risks": sorted(new_risks-old_risks),
             "risks_no_longer_listed": sorted(old_risks-new_risks), "shared_risks": sorted(old_risks & new_risks)}
+
+
+def _metric_base_value(value: float, unit: str) -> tuple[str, float] | None:
+    """Normalize common scale units without inventing currency exchange rates."""
+    normalized = re.sub(r"\s+", "", unit.casefold()).replace("dollars", "usd").replace("$", "usd")
+    scales = {
+        "": ("number", 1.0), "unit": ("number", 1.0), "units": ("number", 1.0),
+        "%": ("percent", 1.0), "percent": ("percent", 1.0), "percentage": ("percent", 1.0),
+        "usd": ("usd", 1.0), "us$": ("usd", 1.0), "k usd": ("usd", 1_000.0),
+        "thousandusd": ("usd", 1_000.0), "kusd": ("usd", 1_000.0), "millionusd": ("usd", 1_000_000.0),
+        "billionusd": ("usd", 1_000_000_000.0),
+        "eur": ("eur", 1.0), "thousandeur": ("eur", 1_000.0),
+        "millioneur": ("eur", 1_000_000.0),
+        "gb": ("bytes", 1_000_000_000.0), "mb": ("bytes", 1_000_000.0),
+        "kb": ("bytes", 1_000.0), "bytes": ("bytes", 1.0),
+        "ms": ("milliseconds", 1.0), "s": ("milliseconds", 1_000.0),
+        "seconds": ("milliseconds", 1_000.0), "minutes": ("milliseconds", 60_000.0),
+    }
+    entry = scales.get(normalized)
+    return (entry[0], float(value) * entry[1]) if entry else None
+
+
+def compare_metric_values(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    """Compare same-name metrics after safe scale normalization; never FX-convert."""
+    old_unit, new_unit = str(left.get("unit", "")), str(right.get("unit", ""))
+    old = _metric_base_value(float(left["value"]), old_unit)
+    new = _metric_base_value(float(right["value"]), new_unit)
+    result = {
+        "name": right.get("name", left.get("name", "Metric")),
+        "earlier_value": left.get("value"), "earlier_unit": old_unit,
+        "later_value": right.get("value"), "later_unit": new_unit,
+        "comparable": bool(old and new and old[0] == new[0]),
+        "normalized_unit": old[0] if old and new and old[0] == new[0] else None,
+    }
+    if result["comparable"]:
+        result["earlier_normalized"] = old[1]
+        result["later_normalized"] = new[1]
+        result["absolute_change"] = new[1] - old[1]
+        result["percentage_change"] = ((new[1] - old[1]) / abs(old[1]) * 100) if old[1] else None
+    return result
+
+
+def _risk_similarity(left: str, right: str) -> float:
+    """Token Jaccard similarity with a conservative phrase similarity fallback."""
+    from difflib import SequenceMatcher
+    tokens_left = set(re.findall(r"[a-z0-9]+", left.casefold()))
+    tokens_right = set(re.findall(r"[a-z0-9]+", right.casefold()))
+    if not tokens_left or not tokens_right:
+        return 0.0
+    jaccard = len(tokens_left & tokens_right) / len(tokens_left | tokens_right)
+    sequence = SequenceMatcher(None, left.casefold(), right.casefold()).ratio()
+    return max(jaccard, sequence * 0.85)
+
+
+def match_semantic_risks(left_risks: list[dict[str, Any]], right_risks: list[dict[str, Any]],
+                         threshold: float = 0.55) -> dict[str, Any]:
+    """Match similarly worded risk labels across reports; output scores for human review."""
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("threshold must be between 0 and 1")
+    candidates = []
+    for old in left_risks:
+        for new in right_risks:
+            score = _risk_similarity(str(old.get("title", "")), str(new.get("title", "")))
+            if score >= threshold:
+                candidates.append((score, old, new))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    used_old, used_new, matches = set(), set(), []
+    for score, old, new in candidates:
+        old_key, new_key = str(old.get("title", "")), str(new.get("title", ""))
+        if old_key in used_old or new_key in used_new:
+            continue
+        used_old.add(old_key); used_new.add(new_key)
+        matches.append({"earlier_risk": old_key, "later_risk": new_key, "similarity": round(score, 3),
+                        "review_required": True})
+    return {
+        "matches": matches,
+        "new_risks": [r for r in right_risks if str(r.get("title", "")) not in used_new],
+        "unmatched_earlier_risks": [r for r in left_risks if str(r.get("title", "")) not in used_old],
+        "note": "Similarity is heuristic; matches require human review and do not prove equivalent risk."
+    }
+
+
+def match_semantic_risks_with_embeddings(left_risks: list[dict[str, Any]],
+                                        right_risks: list[dict[str, Any]],
+                                        threshold: float = 0.55,
+                                        embedding_model: Any | None = None) -> dict[str, Any]:
+    """Compare risk descriptions with sentence embeddings; fall back to fuzzy labels."""
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("threshold must be between 0 and 1")
+    try:
+        if embedding_model is None:
+            import os
+            from sentence_transformers import SentenceTransformer
+            embedding_model = SentenceTransformer(
+                os.getenv("RISK_MATCHING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+            )
+        labels = list(dict.fromkeys(
+            str(item.get("description") or item.get("title", ""))
+            for item in left_risks + right_risks
+        ))
+        vectors = embedding_model.encode(labels, normalize_embeddings=True)
+        if hasattr(vectors, "tolist"):
+            vectors = vectors.tolist()
+        vector_map = dict(zip(labels, vectors))
+        candidates = []
+        for old in left_risks:
+            for new in right_risks:
+                old_text = str(old.get("description") or old.get("title", ""))
+                new_text = str(new.get("description") or new.get("title", ""))
+                score = max(0.0, sum(float(x) * float(y)
+                                     for x, y in zip(vector_map[old_text], vector_map[new_text])))
+                if score >= threshold:
+                    candidates.append((score, old, new))
+        candidates.sort(key=lambda row: row[0], reverse=True)
+        used_old, used_new, matches = set(), set(), []
+        for score, old, new in candidates:
+            old_title, new_title = str(old.get("title", "")), str(new.get("title", ""))
+            if old_title in used_old or new_title in used_new:
+                continue
+            used_old.add(old_title); used_new.add(new_title)
+            matches.append({"earlier_risk": old_title, "later_risk": new_title,
+                            "similarity": round(score, 3), "review_required": True})
+        return {
+            "matches": matches,
+            "new_risks": [item for item in right_risks if str(item.get("title", "")) not in used_new],
+            "unmatched_earlier_risks": [item for item in left_risks if str(item.get("title", "")) not in used_old],
+            "note": "Sentence-embedding similarity is a candidate match, not proof; human review is required.",
+            "method": "sentence-transformers",
+        }
+    except ImportError:
+        result = match_semantic_risks(left_risks, right_risks, threshold)
+        result["method"] = "lexical-fallback"
+        result["note"] = "Sentence Transformers is not installed; fuzzy lexical matching is used. Review all matches."
+        return result
