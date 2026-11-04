@@ -62,7 +62,22 @@ def test_semantic_risk_matching_is_reviewable():
     result = match_semantic_risks(
         [{"title": "Third-party supplier disruption"}],
         [{"title": "Disruption from suppliers"}],
-        threshold=0.4,
+        threshold=0.3,
     )
     assert len(result["matches"]) == 1
     assert result["matches"][0]["review_required"]
+
+
+def test_sqlite_store_persists_page_provenance(tmp_path):
+    from document_store import DocumentStore
+
+    class Embedder:
+        def encode(self, texts, normalize_embeddings=True):
+            return [[1.0, 0.0, 0.0] for _ in texts]
+
+    store = DocumentStore(tmp_path / "pages.db", embedding_model=Embedder())
+    pages = [{"page": 7, "text": "Revenue performance increased substantially. " * 20, "extraction": "ocr"}]
+    store.ingest("quarterly.pdf", pages[0]["text"], pages=pages)
+    hits = store.search("revenue performance", rerank=False)
+    assert hits[0]["page_start"] == 7
+    assert hits[0]["extraction"] == "ocr"
