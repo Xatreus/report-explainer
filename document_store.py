@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from report_utils import chunk_text, normalize_text
+from document_pipeline import chunk_page_records
 
 
 class DocumentStore:
@@ -32,7 +33,13 @@ class DocumentStore:
                 text TEXT NOT NULL, uploaded_at TEXT NOT NULL, analysis_json TEXT)""")
             db.execute("""CREATE TABLE IF NOT EXISTS chunks (
                 id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-                chunk_index INTEGER NOT NULL, text TEXT NOT NULL, embedding_json TEXT NOT NULL)""")
+                chunk_index INTEGER NOT NULL, text TEXT NOT NULL, embedding_json TEXT NOT NULL,
+                page_start INTEGER, page_end INTEGER, extraction TEXT NOT NULL DEFAULT 'text')""")
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(chunks)").fetchall()}
+            for name, declaration in (("page_start", "INTEGER"), ("page_end", "INTEGER"),
+                                      ("extraction", "TEXT NOT NULL DEFAULT 'text'")):
+                if name not in columns:
+                    db.execute(f"ALTER TABLE chunks ADD COLUMN {name} {declaration}")
             db.execute("CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id)")
 
     def _embedder(self):
@@ -59,7 +66,7 @@ class DocumentStore:
     def _vector(value):
         return [float(x) for x in (value.tolist() if hasattr(value, "tolist") else value)]
 
-    def ingest(self, file_name, text):
+    def ingest(self, file_name, text, pages=None, batch_size=32):
         normalized = normalize_text(text)
         if not normalized:
             raise ValueError("The document contains no extractable text.")
@@ -68,8 +75,14 @@ class DocumentStore:
             old = db.execute("SELECT id, file_name FROM documents WHERE sha256=?", (digest,)).fetchone()
             if old:
                 return {"id": old["id"], "file_name": old["file_name"], "duplicate": True, "chunks": 0}
-        pieces = chunk_text(normalized, max_words=220, overlap=40)
-        vectors = self._embedder().encode([p["text"] for p in pieces], normalize_embeddings=True)
+        pieces = chunk_page_records(pages, max_words=220, overlap=40) if pages else chunk_text(normalized, max_words=220, overlap=40)
+        if not pieces:
+            raise ValueError("The document produced no searchable chunks.")
+        vectors = []
+        for start in range(0, len(pieces), batch_size):
+            batch = pieces[start:start + batch_size]
+            encoded = self._embedder().encode([p["text"] for p in batch], normalize_embeddings=True)
+            vectors.extend(encoded)
         doc_id = digest[:16]
         with self._connect() as db:
             db.execute(
@@ -77,8 +90,9 @@ class DocumentStore:
                 (doc_id, file_name, digest, normalized, datetime.now(UTC).isoformat()))
             for index, (piece, vector) in enumerate(zip(pieces, vectors)):
                 db.execute(
-                    "INSERT INTO chunks (id,document_id,chunk_index,text,embedding_json) VALUES (?,?,?,?,?)",
-                    (f"{doc_id}:S{index+1}", doc_id, index, piece["text"], json.dumps(self._vector(vector))))
+                    "INSERT INTO chunks (id,document_id,chunk_index,text,embedding_json,page_start,page_end,extraction) VALUES (?,?,?,?,?,?,?,?)",
+                    (f"{doc_id}:S{index+1}", doc_id, index, piece["text"], json.dumps(self._vector(vector)),
+                     piece.get("page_start"), piece.get("page_end"), piece.get("extraction", "text")))
         return {"id": doc_id, "file_name": file_name, "duplicate": False, "chunks": len(pieces)}
 
     def list_documents(self):
@@ -115,7 +129,7 @@ class DocumentStore:
             params.extend(document_ids)
         with self._connect() as db:
             rows = db.execute(
-                "SELECT c.id,c.document_id,c.chunk_index,c.text,c.embedding_json,d.file_name "
+                "SELECT c.id,c.document_id,c.chunk_index,c.text,c.embedding_json,c.page_start,c.page_end,c.extraction,d.file_name "
                 "FROM chunks c JOIN documents d ON d.id=c.document_id" + where, params).fetchall()
         if not rows:
             return []
@@ -144,6 +158,8 @@ class DocumentStore:
         candidate_ids = sorted(fused, key=fused.get, reverse=True)[:max(top_k*4, 12)]
         results = [{"id": cid, "document_id": by_id[cid]["document_id"],
                     "file_name": by_id[cid]["file_name"], "text": by_id[cid]["text"],
+                    "page_start": by_id[cid]["page_start"], "page_end": by_id[cid]["page_end"],
+                    "extraction": by_id[cid]["extraction"],
                     "vector_score": vectors[cid], "hybrid_score": fused[cid]} for cid in candidate_ids]
         if rerank and results:
             try:
