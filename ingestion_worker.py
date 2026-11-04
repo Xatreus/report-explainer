@@ -22,7 +22,7 @@ def process_report(file_name:str,content:bytes,tenant_id:str)->dict[str,Any]:
   from report_utils import normalize_text
   pages=[{"page":1,"text":normalize_text(content.decode("utf-8",errors="replace")),"extraction":"text"}]
  chunks=chunk_page_records(pages)
- full_text="\\n\\n".join(p["text"] for p in pages)
+ full_text="\n\n".join(p["text"] for p in pages)
  if not full_text.strip(): raise ValueError("No text could be extracted, including OCR.")
  digest=hashlib.sha256(full_text.encode()).hexdigest(); doc_id=hashlib.sha256((tenant_id+digest).encode()).hexdigest()[:24]
  store=PgVectorStore(tenant_id=tenant_id)
