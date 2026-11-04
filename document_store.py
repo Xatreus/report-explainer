@@ -40,7 +40,7 @@ class DocumentStore:
             try:
                 from sentence_transformers import SentenceTransformer
             except ImportError as exc:
-                raise RuntimeError("Semantic search requires sentence-transformers; install requirements.txt.") from exc
+                raise RuntimeError("Semantic search requires sentence-transformers; install requirements-ml.txt.") from exc
             name = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
             self._embedding_model = SentenceTransformer(name)
         return self._embedding_model
