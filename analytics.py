@@ -130,3 +130,57 @@ def match_semantic_risks(left_risks: list[dict[str, Any]], right_risks: list[dic
         "unmatched_earlier_risks": [r for r in left_risks if str(r.get("title", "")) not in used_old],
         "note": "Similarity is heuristic; matches require human review and do not prove equivalent risk."
     }
+
+
+def match_semantic_risks_with_embeddings(left_risks: list[dict[str, Any]],
+                                        right_risks: list[dict[str, Any]],
+                                        threshold: float = 0.55,
+                                        embedding_model: Any | None = None) -> dict[str, Any]:
+    """Compare risk descriptions with sentence embeddings; fall back to fuzzy labels."""
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("threshold must be between 0 and 1")
+    try:
+        if embedding_model is None:
+            import os
+            from sentence_transformers import SentenceTransformer
+            embedding_model = SentenceTransformer(
+                os.getenv("RISK_MATCHING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+            )
+        labels = list(dict.fromkeys(
+            str(item.get("description") or item.get("title", ""))
+            for item in left_risks + right_risks
+        ))
+        vectors = embedding_model.encode(labels, normalize_embeddings=True)
+        if hasattr(vectors, "tolist"):
+            vectors = vectors.tolist()
+        vector_map = dict(zip(labels, vectors))
+        candidates = []
+        for old in left_risks:
+            for new in right_risks:
+                old_text = str(old.get("description") or old.get("title", ""))
+                new_text = str(new.get("description") or new.get("title", ""))
+                score = max(0.0, sum(float(x) * float(y)
+                                     for x, y in zip(vector_map[old_text], vector_map[new_text])))
+                if score >= threshold:
+                    candidates.append((score, old, new))
+        candidates.sort(key=lambda row: row[0], reverse=True)
+        used_old, used_new, matches = set(), set(), []
+        for score, old, new in candidates:
+            old_title, new_title = str(old.get("title", "")), str(new.get("title", ""))
+            if old_title in used_old or new_title in used_new:
+                continue
+            used_old.add(old_title); used_new.add(new_title)
+            matches.append({"earlier_risk": old_title, "later_risk": new_title,
+                            "similarity": round(score, 3), "review_required": True})
+        return {
+            "matches": matches,
+            "new_risks": [item for item in right_risks if str(item.get("title", "")) not in used_new],
+            "unmatched_earlier_risks": [item for item in left_risks if str(item.get("title", "")) not in used_old],
+            "note": "Sentence-embedding similarity is a candidate match, not proof; human review is required.",
+            "method": "sentence-transformers",
+        }
+    except ImportError:
+        result = match_semantic_risks(left_risks, right_risks, threshold)
+        result["method"] = "lexical-fallback"
+        result["note"] = "Sentence Transformers is not installed; fuzzy lexical matching is used. Review all matches."
+        return result
