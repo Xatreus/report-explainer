@@ -1,6 +1,6 @@
 import pytest
 
-from analytics import compare_report_analyses, match_semantic_risks
+from analytics import compare_report_analyses, match_semantic_risks, match_semantic_risks_with_embeddings
 from document_pipeline import chunk_page_records
 from retrieval_eval import evaluate_run, evaluate_dataset, recall_at_k, reciprocal_rank, ndcg_at_k
 from security import authorize, hash_password, issue_session_token, verify_password, verify_session_token
@@ -81,3 +81,18 @@ def test_sqlite_store_persists_page_provenance(tmp_path):
     hits = store.search("revenue performance", rerank=False)
     assert hits[0]["page_start"] == 7
     assert hits[0]["extraction"] == "ocr"
+
+
+def test_semantic_risk_matching_accepts_injected_embedding_model():
+    class FakeRiskModel:
+        def encode(self, labels, normalize_embeddings=True):
+            return [[1.0, 0.0] if "supplier" in label.lower() else [0.0, 1.0] for label in labels]
+
+    result = match_semantic_risks_with_embeddings(
+        [{"title": "Supplier outage", "description": "Vendor dependency interruption"}],
+        [{"title": "Third party failure", "description": "Vendor dependency interruption"}],
+        threshold=0.9,
+        embedding_model=FakeRiskModel(),
+    )
+    assert len(result["matches"]) == 1
+    assert result["method"] == "sentence-transformers"
