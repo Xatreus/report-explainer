@@ -9,13 +9,27 @@ from openai import OpenAI
 from analytics import ANALYSIS_SCHEMA, compare_report_analyses, match_semantic_risks_with_embeddings, parse_json_object
 from analysis_agent import run_report_agent
 from document_store import DocumentStore
-from document_pipeline import extract_pdf_pages
-from report_utils import chunk_text, extract_pdf_text, local_outline, normalize_text, retrieve_chunks, validate_text
+from document_pipeline import chunk_page_records, extract_pdf_pages
+from report_utils import chunk_text, local_outline, normalize_text, retrieve_chunks, validate_text
 
 load_dotenv()
 st.set_page_config(page_title="Report Explainer", page_icon="📄", layout="wide")
-st.title("📄 Report Explainer")
-st.caption("A multi-document intelligence workspace: semantic search, evidence-grounded analysis and executive dashboards.")
+st.markdown("""<style>
+.block-container {padding-top:2rem;padding-bottom:3rem;max-width:1440px}
+[data-testid="stSidebar"] {border-right:1px solid rgba(128,128,128,.18)}
+[data-testid="stMetric"] {background:rgba(128,128,128,.07);border:1px solid rgba(128,128,128,.16);padding:14px 16px;border-radius:14px}
+.stButton>button {border-radius:10px}
+[data-testid="stFileUploader"] section {border-radius:14px}
+.rx-hero {padding:1.35rem 1.5rem;border:1px solid rgba(128,128,128,.2);border-radius:18px;background:linear-gradient(115deg,rgba(79,124,255,.12),rgba(128,128,128,.035));margin:.35rem 0 1.35rem}
+.rx-kicker {text-transform:uppercase;letter-spacing:.12em;font-size:.72rem;font-weight:750;opacity:.7}
+.rx-title {font-size:clamp(1.8rem,4vw,2.65rem);line-height:1.1;font-weight:780;margin:.3rem 0 .55rem}
+.rx-subtitle {font-size:1rem;opacity:.78;max-width:850px}
+.rx-pill {display:inline-block;border:1px solid rgba(128,128,128,.25);border-radius:999px;padding:.25rem .65rem;font-size:.78rem;margin:.7rem .35rem 0 0}
+</style>
+<div class="rx-hero"><div class="rx-kicker">Document intelligence workspace</div>
+<div class="rx-title">Understand the reports.<br>Find the evidence.</div>
+<div class="rx-subtitle">Search across documents, compare findings, explore financial metrics and ask an AI analyst to explain what matters.</div>
+<span class="rx-pill">PDF & TXT</span><span class="rx-pill">Hybrid RAG</span><span class="rx-pill">Page-aware sources</span><span class="rx-pill">Local-first storage</span></div>""", unsafe_allow_html=True)
 
 @st.cache_resource
 def get_store():
@@ -39,17 +53,15 @@ with st.sidebar:
     audience = st.selectbox("Audience", ["General reader", "Student", "Business leader", "Technical reader", "Researcher"])
     detail = st.select_slider("Explanation depth", ["Quick overview", "Balanced", "Detailed"], value="Balanced")
     language = st.selectbox("Output language", ["English", "Hindi", "Arabic", "Urdu"])
-    rerank = st.toggle("Use cross-encoder reranking", value=True)
+    rerank = st.toggle("Use cross-encoder reranking", value=False, help="Downloads an additional model on first use.")
     use_ai = st.toggle("Use AI explanation when configured", value=True)
-    st.caption("First semantic search may download embedding/reranker models.")
+    st.caption("Embeddings run locally. The first use downloads the selected model.")
 
 tabs = st.tabs(["Workspace & upload", "Semantic search & Q&A", "Compare reports", "Intelligence dashboard", "Analysis agent", "Explain one report"])
 
 with tabs[0]:
-    st.subheader("Upload a collection of reports")
-    queue_background = st.checkbox("Use Redis background ingestion + PostgreSQL (optional deployment)", value=False)
-    if queue_background:
-        st.caption("Requires DATABASE_URL, REDIS_URL, TENANT_ID, requirements-worker.txt, and a running RQ worker.")
+    st.subheader("Build your report library")
+    st.caption("Add one or more reports. Your indexed documents stay in the local SQLite workspace.")
     files = st.file_uploader("Select up to 100 PDF or TXT reports", type=["pdf", "txt"], accept_multiple_files=True)
     if files:
         if len(files) > 100:
@@ -59,12 +71,6 @@ with tabs[0]:
             for index, file in enumerate(files):
                 try:
                     raw = file.getvalue()
-                    if queue_background:
-                        from ingestion_worker import enqueue_ingestion
-                        job = enqueue_ingestion(file.name, raw, os.getenv("TENANT_ID", ""))
-                        st.write(f"Queued {file.name} · job {job.id}")
-                        progress.progress((index + 1) / len(files))
-                        continue
                     pages = extract_pdf_pages(raw, ocr_if_empty=True) if file.name.lower().endswith(".pdf") else None
                     content = "\n\n".join(page["text"] for page in pages) if pages is not None else raw.decode("utf-8", errors="replace")
                     valid, reason = validate_text(normalize_text(content), max_chars=2_000_000)
@@ -92,7 +98,7 @@ with tabs[0]:
         st.info("Upload reports to create your searchable workspace.")
 
 with tabs[1]:
-    st.subheader("Search across your report library")
+    st.subheader("Ask your report library")
     question = st.text_input("Ask a question", placeholder="What risks appear across the uploaded reports?")
     docs = store.list_documents()
     selected_docs = st.multiselect("Limit search to selected reports (optional)",
@@ -137,7 +143,7 @@ with tabs[1]:
         st.info("Configure OPENAI_API_KEY to generate an answer. Retrieval works independently.")
 
 with tabs[2]:
-    st.subheader("Compare two reports")
+    st.subheader("Compare reports")
     docs = store.list_documents()
     if len(docs) < 2:
         st.info("Index at least two reports to compare them.")
@@ -185,7 +191,7 @@ with tabs[2]:
                     st.error(f"Comparison failed: {exc}")
 
 with tabs[3]:
-    st.subheader("Document intelligence dashboard")
+    st.subheader("Intelligence dashboard")
     docs = store.list_documents()
     analyzed = []
     for doc in docs:
@@ -230,7 +236,7 @@ with tabs[3]:
             st.dataframe(entity_rows, use_container_width=True, hide_index=True)
 
 with tabs[4]:
-    st.subheader("Specialized report-analysis agent")
+    st.subheader("Report analyst")
     st.caption("A bounded read-only tool-using workflow. It can list reports, search evidence, inspect report text, and then run a separate evidence-checking pass.")
     agent_question = st.text_area("Analysis objective", placeholder="Compare the major operational risks across all reports and cite the strongest evidence.")
     max_steps = st.slider("Maximum tool-call rounds", 1, 6, 4)
