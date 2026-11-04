@@ -59,7 +59,7 @@ def _metric_base_value(value: float, unit: str) -> tuple[str, float] | None:
         "": ("number", 1.0), "unit": ("number", 1.0), "units": ("number", 1.0),
         "%": ("percent", 1.0), "percent": ("percent", 1.0), "percentage": ("percent", 1.0),
         "usd": ("usd", 1.0), "us$": ("usd", 1.0), "k usd": ("usd", 1_000.0),
-        "thousandusd": ("usd", 1_000.0), "millionusd": ("usd", 1_000_000.0),
+        "thousandusd": ("usd", 1_000.0), "kusd": ("usd", 1_000.0), "millionusd": ("usd", 1_000_000.0),
         "billionusd": ("usd", 1_000_000_000.0),
         "eur": ("eur", 1.0), "thousandeur": ("eur", 1_000.0),
         "millioneur": ("eur", 1_000_000.0),
